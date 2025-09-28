@@ -8,5 +8,4 @@ If active 24/7 the bot will collect data from 9:30am to 4:00pm EST. Script does 
 
 Stochastics slow indicator uses line crossovers to signal a buy or sell response. Price also needs to be > SMA to long and < SMA to short.
 
-"99% of miners quit before they find the gold"
-    - Warren Buffet
+created by Warren buffet
