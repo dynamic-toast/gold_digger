@@ -1,12 +1,12 @@
-import csv, time
+import csv
 import pandas as pd
 from signalrcore.hub_connection_builder import HubConnectionBuilder
 from datetime import datetime, time
-from secretz import CONTRACT_ID
+import os
 
 
 class StreamHandler:
-    def __init__(self, jwt, contract_id=CONTRACT_ID):
+    def __init__(self, jwt, contract_id="CON.F.US.GCE.Z25"):
         self.jwt = jwt
         self.contract_id = contract_id
         self.hub = None
@@ -29,9 +29,10 @@ class StreamHandler:
             writer.writeheader()
 
         # bars file
-        with open(self.bars_csv, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=["timestamp","open","high","low","close","volume"])
-            writer.writeheader()
+        if not os.path.exists(self.ticks_csv):
+            with open(self.ticks_csv, "w", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=["contract_id","symbolId","price","volume","timestamp"])
+                writer.writeheader()
 
     def connect(self):
         url = f"https://rtc.topstepx.com/hubs/market?access_token={self.jwt}"
@@ -49,21 +50,22 @@ class StreamHandler:
         )
 
         self.hub.on_open(self._on_open)
-        self.hub.on_close(lambda: print("Connection closed..."))
-        self.hub.on_error(lambda e: print("Connection error:", e))
+        self.hub.on_close(lambda: print("Stream connection closed..."))
+        self.hub.on_error(lambda e: print("Stream connection error:", e))
         self.hub.on("GatewayTrade", self._on_trade)
 
-        print("Attempting connection…")
+        print("Attempting stream connection…")
         self.hub.start()
 
     def _on_open(self):
-        print("Connection successful!")
+        print("Stream connection successful!")
         self.hub.send("SubscribeContractTrades", [self.contract_id])
         print("Subscribed to:", self.contract_id)
+        print()
 
-    def in_rth_utc(ts: datetime):
+    def in_rth_utc(self, ts: datetime):
 
-        return time(14,30) <= ts.time() <= time(21,0)
+        return time(13,30) <= ts.time() <= time(20,00)
 
     def _on_trade(self, args):
         try:
@@ -76,7 +78,7 @@ class StreamHandler:
                 self._write_tick(contract_id, trade)
                 self._process_tick(trade)
         except Exception as e:
-            print("Bad trade payload:", args, e)
+            print("LOG: Bad trade payload:", args, e)
 
     def _write_tick(self, contract_id, trade):
         row = {
@@ -91,19 +93,21 @@ class StreamHandler:
             writer.writerow(row)
 
     def _process_tick(self, trade):
-        bar_time = pd.to_datetime(trade["timestamp"]).floor(self.aggregate_time)
+        bar_time = pd.to_datetime(trade["timestamp"], utc=True).floor(self.aggregate_time)
+        bar_time = bar_time.tz_convert("UTC").tz_localize(None)
 
-        if (self.current_bar is None) or (bar_time != self.current_bar["timestamp"]):
+    
+        if (self.current_bar is None) or (bar_time != pd.to_datetime(self.current_bar["timestamp"])):
             # write old bar if exists
             if self.current_bar is not None:
                 with open(self.bars_csv, "a", newline="") as f:
                     writer = csv.DictWriter(f, fieldnames=self.current_bar.keys())
                     writer.writerow(self.current_bar)
-                print("Bar Printed:", self.current_bar)
+                print("LOG: Bar Printed ------- ", self.current_bar)
 
             # start new bar
             self.current_bar = {
-                "timestamp": bar_time,
+                "timestamp": bar_time.strftime("%Y-%m-%d %H:%M:%S"),
                 "open": trade["price"],
                 "high": trade["price"],
                 "low": trade["price"],
@@ -116,3 +120,6 @@ class StreamHandler:
             self.current_bar["low"] = min(self.current_bar["low"], trade["price"])
             self.current_bar["close"] = trade["price"]
             self.current_bar["volume"] += trade["volume"]
+
+    
+
