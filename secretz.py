@@ -1,5 +1,0 @@
-EMAIL= "EMAIL"
-API_KEY="API KEY"
-BASE_URL="https://api.topstepx.com"
-CONTRACT_ID="CONTRACT ID"
-ACCOUNT_ID=None
